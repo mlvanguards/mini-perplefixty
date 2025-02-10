@@ -1,12 +1,9 @@
 import json
-import os
 
 import requests
 
+from settings import get_settings
 from states.state import AgentGraphState
-from utils.helper_functions import load_config
-
-config_path = os.path.join(os.path.dirname(__file__), "..", "config", "config.yaml")
 
 
 def format_results(organic_results):
@@ -21,8 +18,7 @@ def format_results(organic_results):
 
 
 def get_google_serper(state: AgentGraphState, plan):
-    load_config(config_path)
-
+    config = get_settings()
     plan_data = plan().content
     plan_data = json.loads(plan_data)
     search = plan_data.get("search_term")
@@ -30,9 +26,7 @@ def get_google_serper(state: AgentGraphState, plan):
     search_url = "https://google.serper.dev/search"
     headers = {
         "Content-Type": "application/json",
-        "X-API-KEY": os.environ[
-            "SERPER_API_KEY"
-        ],  # Ensure this environment variable is set with your API key
+        "X-API-KEY": config.SERPER_API_KEY,
     }
     payload = json.dumps({"q": search})
 

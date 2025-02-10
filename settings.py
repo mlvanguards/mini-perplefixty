@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     SERPER_API_KEY: str
 
+    PYTHONPATH: str
+
     class Config:
         env_file = ".env"
 
