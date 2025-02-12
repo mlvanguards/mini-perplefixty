@@ -11,10 +11,10 @@ from src.nodes.planner import PlannerNode
 from src.nodes.reporter import ReporterNode
 from src.nodes.reviewer import ReviewerNode
 from src.nodes.router import RouterNode
+from src.nodes.scraper import ScraperNode
 from src.nodes.selector import SelectorNode
+from src.nodes.serper import SerperNode
 from src.states.state import AgentGraphState
-from src.tools.basic_scraper import scrape_website
-from src.tools.google_serper import get_google_serper
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,14 @@ class AgentGraphBuilder:
         """
         Create all nodes for the graph.
         """
-        return {
+
+        # Create a named function instead of a lambda
+        def final_report_func(state):
+            return {"final_report": state.get("reporter_latest")}
+
+        final_report_func.name = "final_report"  # Add name attribute
+
+        nodes = {
             "planner": PlannerNode(
                 model=self.config.model,
                 server=self.config.server,
@@ -46,15 +53,15 @@ class AgentGraphBuilder:
                 model_endpoint=self.config.model_endpoint,
                 temperature=self.config.temperature,
             ),
-            "web_search": get_google_serper,
-            "researcher": SelectorNode(
+            "serper_search": SerperNode(model=self.config.model),
+            "selector": SelectorNode(
                 model=self.config.model,
                 server=self.config.server,
                 stop=self.config.stop,
                 model_endpoint=self.config.model_endpoint,
                 temperature=self.config.temperature,
             ),
-            "scraping": scrape_website,
+            "scraper": ScraperNode(),
             "reporter": ReporterNode(
                 model=self.config.model,
                 server=self.config.server,
@@ -76,28 +83,23 @@ class AgentGraphBuilder:
                 model_endpoint=self.config.model_endpoint,
                 temperature=self.config.temperature,
             ),
-            "final_report": lambda state: {
-                "final_report": state.get("reporter_latest")
-            },
+            "final_report": final_report_func,
         }
+        return nodes
 
     def _add_nodes_to_graph(self, nodes: Dict[str, Any]) -> None:
         """
         Add nodes to the graph.
         """
         try:
-            for node_name, node in nodes.items():
-                if isinstance(
-                    node,
-                    (PlannerNode, SelectorNode, ReporterNode, ReviewerNode, RouterNode),
-                ):
-                    self.graph.add_node(node_name, node.process)
+            for name, node in nodes.items():
+                if hasattr(node, "process"):
+                    self.graph.add_node(name, node.process)
                 else:
-                    self.graph.add_node(node_name, node)
+                    self.graph.add_node(name, node)  # For the final_report function
             logger.info(f"Successfully added {len(nodes)} nodes to graph")
         except Exception as e:
             logger.error(f"Failed to add nodes to graph: {str(e)}")
-            raise Exception(f"Failed to add nodes: {str(e)}")
 
     def _route_next_step(self, state: AgentGraphState) -> str:
         """
@@ -126,10 +128,10 @@ class AgentGraphBuilder:
         # Basic flow edges
         edges = [
             ("start", "planner"),
-            ("planner", "web_search"),
-            ("web_search", "researcher"),
-            ("researcher", "scraping"),
-            ("scraping", "reporter"),
+            ("planner", "serper_search"),
+            ("serper_search", "selector"),
+            ("selector", "scraper"),
+            ("scraper", "reporter"),
             ("reporter", "reviewer"),
             ("reviewer", "router"),
             ("router", "final_report"),
@@ -151,14 +153,16 @@ class AgentGraphBuilder:
             self.graph.add_node(
                 "start",
                 lambda state: {
-                    "user_query": state.get("query", ""),
+                    "research_question": state.get("research_question", ""),
                     "planner_response": [],
-                    "web_search_response": [],
-                    "researcher_response": [],
-                    "scraping_response": [],
+                    "selector_response": [],
                     "reporter_response": [],
                     "reviewer_response": [],
                     "router_response": [],
+                    "serper_response": [],
+                    "scraper_response": [],
+                    "final_reports": [],
+                    "end_chain": [HumanMessage(content="false")],
                 },
             )
 

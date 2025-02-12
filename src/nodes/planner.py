@@ -1,8 +1,5 @@
-from typing import Any, Dict
-
 from src.agents.planner import PlannerAgent
 from src.nodes.base import GraphNode
-from src.prompts.planner import planner_prompt_template
 
 
 class PlannerNode(GraphNode):
@@ -17,18 +14,29 @@ class PlannerNode(GraphNode):
     def name(self) -> str:
         return "planner"
 
-    def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def process(self, state):
+        """
+        Process the current state and generate a plan.
+        """
         agent = PlannerAgent(
-            state=state,
             model=self.model,
             server=self.server,
             stop=self.stop,
             model_endpoint=self.model_endpoint,
             temperature=self.temperature,
+            state=state,
         )
+
         return agent.invoke(
-            research_question=state["research_question"],
-            prompt=planner_prompt_template,
-            current_plan=state.get("current_plan"),
-            execution_history=state.get("execution_history"),
+            {
+                "research_question": state["research_question"],
+                "planner_response": state.get("planner_response", []),
+                "selector_response": state.get("selector_response", []),
+                "reporter_response": state.get("reporter_response", []),
+                "reviewer_response": state.get("reviewer_response", []),
+                "router_response": state.get("router_response", []),
+                "serper_response": state.get("serper_response", []),
+                "scraper_response": state.get("scraper_response", []),
+                "final_reports": state.get("final_reports", []),
+            }
         )

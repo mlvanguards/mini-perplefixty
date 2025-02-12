@@ -1,3 +1,5 @@
+from termcolor import colored
+
 from src.agents.base import Agent
 from src.prompts.reporter import reporter_prompt_template
 from src.utils.helper_functions import check_for_content, get_current_utc_datetime

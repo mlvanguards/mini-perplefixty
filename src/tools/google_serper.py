@@ -3,7 +3,10 @@ import json
 import requests
 
 from settings import get_settings
+from src.custom_logging import setup_logger
 from states.state import AgentGraphState
+
+logger = setup_logger(__name__)
 
 
 def format_results(organic_results):
@@ -18,6 +21,8 @@ def format_results(organic_results):
 
 
 def get_google_serper(state: AgentGraphState, plan):
+    print("STATE", state)
+    print("PLAN", plan)
     config = get_settings()
     plan_data = plan().content
     plan_data = json.loads(plan_data)
