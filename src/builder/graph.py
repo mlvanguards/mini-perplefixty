@@ -7,6 +7,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
 from langgraph.graph import END, StateGraph
 
+from src.nodes.final_report import FinalReportNode
 from src.nodes.planner import PlannerNode
 from src.nodes.reporter import ReporterNode
 from src.nodes.reviewer import ReviewerNode
@@ -83,7 +84,7 @@ class AgentGraphBuilder:
                 model_endpoint=self.config.model_endpoint,
                 temperature=self.config.temperature,
             ),
-            "final_report": final_report_func,
+            "final_report": FinalReportNode(),
         }
         return nodes
 

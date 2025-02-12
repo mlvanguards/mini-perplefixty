@@ -28,34 +28,30 @@ def main():
 
     # Main interaction loop
     verbose = False
-    while True:
-        # query = input("\nPlease enter your research question (or 'quit' to exit): ")
-        query = "What is the capital of France?"
-        if query.lower() == "quit":
-            print("Exiting program...")
-            break
+    # query = input("\nPlease enter your research question (or 'quit' to exit): ")
+    query = "What is the capital of France?"
 
-        # Prepare inputs for the workflow
-        dict_inputs = {
-            "research_question": query,
-            "planner_response": [],
-            "selector_response": [],
-            "reporter_response": [],
-            "reviewer_response": [],
-            "router_response": [],
-            "serper_response": [],
-            "scraper_response": [],
-            "final_reports": [],
-            "end_chain": [HumanMessage(content="false")],
-        }
-        limit = {"recursion_limit": iterations}
+    # Prepare inputs for the workflow
+    dict_inputs = {
+        "research_question": query,
+        "planner_response": [],
+        "selector_response": [],
+        "reporter_response": [],
+        "reviewer_response": [],
+        "router_response": [],
+        "serper_response": [],
+        "scraper_response": [],
+        "final_reports": [],
+        "end_chain": [HumanMessage(content="false")],
+    }
+    limit = {"recursion_limit": iterations}
 
-        # Stream results
-        for event in workflow.stream(dict_inputs, limit):
-            if verbose:
-                print("\nState Dictionary:", event)
-            else:
-                print("\n")
+    # Stream results
+    for event in workflow.stream(dict_inputs, limit):
+        if verbose:
+            print("\nState Dictionary:", event)
+        else:
+            print("\n")
 
 
 if __name__ == "__main__":

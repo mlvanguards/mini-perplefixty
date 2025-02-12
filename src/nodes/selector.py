@@ -1,25 +1,40 @@
-import logging
-from typing import Any, Dict
+import json
+from typing import Any, Dict, Literal
 
-from langchain.schema import HumanMessage
+from langchain_core.messages import BaseMessage
 from termcolor import colored
 
 from src.agents.selector import SelectorAgent
+from src.custom_logging import setup_logger
 from src.nodes.base import GraphNode
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
+
+
+class SelectorMessage(BaseMessage):
+    """Message class for selector responses."""
+
+    type: Literal["selector"] = "selector"
+
+    def __init__(self, content: str):
+        super().__init__(content=content)
+
+    @property
+    def type(self) -> str:
+        return "selector"
 
 
 class SelectorNode(GraphNode):
+    __slots__ = ["model", "server", "stop", "model_endpoint", "temperature", "agent"]
+
     def __init__(self, model, server, stop, model_endpoint, temperature):
         self.model = model
         self.server = server
         self.stop = stop
         self.model_endpoint = model_endpoint
         self.temperature = temperature
-        # Initialize the agent with the correct parameters
         self.agent = SelectorAgent(
-            state={},  # Empty initial state
+            state={},
             model=self.model,
             server=self.server,
             stop=self.stop,
@@ -32,94 +47,69 @@ class SelectorNode(GraphNode):
         return "selector"
 
     def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        logger.info(colored("Processing in SelectorNode 🔍", "yellow"))
-        print(colored("Processing in SelectorNode 🔍", "yellow"))
-        print(colored(f"Current state: {state}", "cyan"))
-
         serp_messages = state.get("serper_response", [])
-        print(colored(f"Serp messages: {serp_messages}", "red"))
         if not serp_messages:
-            warning_msg = "No serper response found in state"
-            logger.warning(colored(warning_msg, "red"))
+            print(colored("No serper response found in state ⚠️", "yellow"))
             return {
                 **state,
                 "selector_response": [
-                    HumanMessage(content="No search results to process")
+                    SelectorMessage(
+                        content=json.dumps(
+                            {"selector_response": "No search results to process"}
+                        )
+                    )
                 ],
-            }
-
-        serp = serp_messages[-1] if serp_messages else None
-        if not serp or not isinstance(serp, HumanMessage):
-            warning_msg = "Invalid serper response message"
-            logger.warning(colored(warning_msg, "red"))
-            return {
-                **state,
-                "selector_response": [HumanMessage(content="Invalid search results")],
             }
 
         try:
-            # Debug input
-            print(colored("\n=== Selector Input ===", "cyan"))
-            print(
-                colored(
-                    f"Research Question: {state.get('research_question', '')}", "cyan"
-                )
-            )
-            print(
-                colored(f"Serp Content: {serp.content[:200]}...", "cyan")
-            )  # First 200 chars
+            # Get the last SERP message
+            serp = serp_messages[-1] if serp_messages else None
 
-            response = self.agent.invoke(
-                {
-                    "input": {
-                        "research_question": state.get("research_question", ""),
-                        "serp": serp.content,
-                    }
+            # Get agent response
+            agent_response = self.agent.invoke(
+                research_question=state.get("research_question", ""), serp=serp
+            )
+
+            # The agent's state will contain the selector_response
+            selector_response = agent_response.get("selector_response", "")
+
+            # Create a structured response
+            if selector_response:
+                return {
+                    **state,
+                    "selector_response": [
+                        SelectorMessage(content=str(selector_response))
+                    ],
                 }
-            )
-
-            # Debug response
-            print(colored("\n=== Selector Raw Response ===", "yellow"))
-            print(colored(f"Type: {type(response)}", "yellow"))
-            print(colored(f"Content: {response}", "yellow"))
-
-            # Extract and validate response content
-            response_content = (
-                response.get("output", response)
-                if isinstance(response, dict)
-                else response
-            )
-
-            # Ensure response_content is a string
-            if not isinstance(response_content, str):
-                response_content = str(response_content)
-
-            # Debug final formatted response
-            print(colored("\n=== Selector Formatted Response ===", "green"))
-            print(colored(f"Type: {type(response_content)}", "green"))
-            print(
-                colored(f"Content: {response_content[:200]}...", "green")
-            )  # First 200 chars
-
-            logger.info(colored("Successfully processed search results ✅", "green"))
-
-            formatted_response = HumanMessage(content=response_content)
-
-            # Verify the formatted message
-            print(colored("\n=== Final HumanMessage ===", "blue"))
-            print(colored(f"Type: {type(formatted_response)}", "blue"))
-            print(colored(f"Content Type: {type(formatted_response.content)}", "blue"))
-            print(colored(f"Content Length: {len(formatted_response.content)}", "blue"))
-
-            return {**state, "selector_response": [formatted_response]}
+            else:
+                print(
+                    colored("Selector 🧑🏼‍💻: No valid response generated ⚠️", "yellow")
+                )
+                return {
+                    **state,
+                    "selector_response": [
+                        SelectorMessage(
+                            content=json.dumps(
+                                {"selector_response": "Unable to generate selection"}
+                            )
+                        )
+                    ],
+                }
 
         except Exception as e:
             error_msg = f"Error in selector processing: {str(e)}"
-            logger.error(colored(error_msg, "red"))
-            print(colored(f"\n=== Error Details ===\n{str(e)}", "red"))
+            print(colored(error_msg, "red"))
             return {
                 **state,
                 "selector_response": [
-                    HumanMessage(content=f"Error processing results: {str(e)}")
+                    SelectorMessage(
+                        content=json.dumps(
+                            {"selector_response": f"Error processing results: {str(e)}"}
+                        )
+                    )
                 ],
             }
+
+    def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Make the node callable to work with LangGraph."""
+        return self.process(state)

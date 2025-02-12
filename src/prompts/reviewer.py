@@ -2,7 +2,7 @@ reviewer_prompt_template = """
 You are a reviewer. Your task is to review the reporter's response to the research question and provide feedback.
 
 Here is the reporter's response:
-Reportr's response: {reporter}
+Reportr's response: {report_content}
 
 Your feedback should include reasons for passing or failing the review and suggestions for improvement.
 

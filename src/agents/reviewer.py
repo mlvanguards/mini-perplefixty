@@ -2,39 +2,61 @@ from termcolor import colored
 
 from src.agents.base import Agent
 from src.prompts.reviewer import reviewer_prompt_template
-from src.utils.helper_functions import check_for_content, get_current_utc_datetime
+from src.utils.helper_functions import get_current_utc_datetime
 
 
 class ReviewerAgent(Agent):
     def invoke(
         self,
-        research_question,
+        state_input: dict,
         prompt=reviewer_prompt_template,
-        reporter=None,
         feedback=None,
+        state=None,
     ):
-        reporter_value = reporter() if callable(reporter) else reporter
-        feedback_value = feedback() if callable(feedback) else feedback
+        """
+        Invoke the reviewer agent with input state.
 
-        reporter_value = check_for_content(reporter_value)
-        feedback_value = check_for_content(feedback_value)
+        Args:
+            state_input (dict): Input state containing research_question and report_content
+            prompt: The prompt template to use
+        """
+        try:
+            # Extract input values
+            input_data = state_input.get("input", {})
+            research_question = input_data.get("research_question", "")
+            report_content = input_data.get("report_content", "")
 
-        reviewer_prompt = prompt.format(
-            reporter=reporter_value,
-            state=self.state,
-            feedback=feedback_value,
-            datetime=get_current_utc_datetime(),
-        )
+            print(
+                colored(f"Reviewing report for question: {research_question}", "cyan")
+            )
 
-        messages = [
-            {"role": "system", "content": reviewer_prompt},
-            {"role": "user", "content": f"research question: {research_question}"},
-        ]
+            # Format the prompt with the report content
+            reviewer_prompt = prompt.format(
+                report_content=report_content,  # Changed from reporter to report_content
+                datetime=get_current_utc_datetime(),
+                feedback=feedback,
+                state=state,
+            )
 
-        llm = self.get_llm()
-        ai_msg = llm.invoke(messages)
-        response = ai_msg.content
+            # Create messages for LLM
+            messages = [
+                {"role": "system", "content": reviewer_prompt},
+                {"role": "user", "content": f"research question: {research_question}"},
+            ]
 
-        print(colored(f"Reviewer 👩🏽‍⚖️: {response}", "magenta"))
-        self.update_state("reviewer_response", response)
-        return self.state
+            # Get LLM response
+            llm = self.get_llm()
+            ai_msg = llm.invoke(messages)
+            response = ai_msg.content
+
+            # Update state with the response
+            self.state = {"reviewer_response": response}
+
+            print(colored(f"Reviewer 👩🏽‍⚖️: {response}", "magenta"))
+
+            return self.state
+
+        except Exception as e:
+            print(colored(f"Error in ReviewerAgent: {str(e)}", "red"))
+            self.state = {"reviewer_response": f"Error in review: {str(e)}"}
+            return self.state

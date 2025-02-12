@@ -1,8 +1,8 @@
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Literal
 
 import requests
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import BaseMessage
 from termcolor import colored
 
 from settings import get_settings
@@ -10,6 +10,20 @@ from src.custom_logging import setup_logger
 from src.nodes.base import GraphNode
 
 logger = setup_logger(__name__)
+
+
+class SerperMessage(BaseMessage):
+    """Message class for Serper search results."""
+
+    type: Literal["serper"] = "serper"
+
+    def __init__(self, content: str):
+        super().__init__(content=content)
+
+    @property
+    def type(self) -> str:
+        """Return the type of the message."""
+        return "serper"
 
 
 def format_results(organic_results):
@@ -24,9 +38,9 @@ def format_results(organic_results):
 
 
 class SerperNode(GraphNode):
-    def __init__(
-        self, model=None, **kwargs
-    ):  # Accept model parameter to match other nodes
+    __slots__ = ["config"]
+
+    def __init__(self, model=None, **kwargs):
         self.config = get_settings()
         print(colored("Initialized SerperNode 🔍", "green"))
 
@@ -40,7 +54,7 @@ class SerperNode(GraphNode):
             print(colored("No plan provided in state ⚠️", "yellow"))
             return {
                 **state,
-                "serper_response": [HumanMessage(content="No plan provided")],
+                "serper_response": [SerperMessage(content="No plan provided")],
             }
 
         try:
@@ -69,14 +83,14 @@ class SerperNode(GraphNode):
                 formatted_results = format_results(results["organic"])
                 return {
                     **state,
-                    "serper_response": [HumanMessage(content=formatted_results)],
+                    "serper_response": [SerperMessage(content=formatted_results)],
                 }
             else:
                 print(colored("Serper 🔍: No organic results found ⚠️", "yellow"))
                 return {
                     **state,
                     "serper_response": [
-                        HumanMessage(content="No organic results found.")
+                        SerperMessage(content="No organic results found.")
                     ],
                 }
 
@@ -87,7 +101,7 @@ class SerperNode(GraphNode):
             return {
                 **state,
                 "serper_response": [
-                    HumanMessage(content=f"HTTP error occurred: {http_err}")
+                    SerperMessage(content=f"HTTP error occurred: {http_err}")
                 ],
             }
         except requests.exceptions.RequestException as req_err:
@@ -99,7 +113,7 @@ class SerperNode(GraphNode):
             return {
                 **state,
                 "serper_response": [
-                    HumanMessage(content=f"Request error occurred: {req_err}")
+                    SerperMessage(content=f"Request error occurred: {req_err}")
                 ],
             }
         except (KeyError, json.JSONDecodeError) as err:
@@ -107,7 +121,7 @@ class SerperNode(GraphNode):
             return {
                 **state,
                 "serper_response": [
-                    HumanMessage(content=f"Error processing data: {err}")
+                    SerperMessage(content=f"Error processing data: {err}")
                 ],
             }
 

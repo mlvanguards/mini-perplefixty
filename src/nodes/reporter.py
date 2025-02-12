@@ -1,7 +1,9 @@
+import json
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Literal
 
-from langchain.schema import HumanMessage
+from langchain_core.messages import BaseMessage
+from termcolor import colored
 
 from src.agents.reporter import ReporterAgent
 from src.nodes.base import GraphNode
@@ -9,16 +11,35 @@ from src.nodes.base import GraphNode
 logger = logging.getLogger(__name__)
 
 
+class ReporterMessage(BaseMessage):
+    """Message class for reporter responses."""
+
+    type: Literal["reporter"] = "reporter"
+
+    def __init__(self, content: Dict[str, Any]):
+        super().__init__(content=json.dumps(content))
+        self._raw_content = content
+
+    @property
+    def type(self) -> str:
+        return "reporter"
+
+    @property
+    def dict_content(self) -> Dict[str, Any]:
+        return self._raw_content
+
+
 class ReporterNode(GraphNode):
+    __slots__ = ["model", "server", "stop", "model_endpoint", "temperature", "agent"]
+
     def __init__(self, model, server, stop, model_endpoint, temperature):
         self.model = model
         self.server = server
         self.stop = stop
         self.model_endpoint = model_endpoint
         self.temperature = temperature
-        # Initialize the agent with correct parameters
         self.agent = ReporterAgent(
-            state={},  # Empty initial state
+            state={},
             model=self.model,
             server=self.server,
             stop=self.stop,
@@ -32,40 +53,49 @@ class ReporterNode(GraphNode):
 
     def process(self, state: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("Processing in ReporterNode 📝")
-
         try:
-            # Get the necessary inputs from state
+            print(colored("Processing in ReporterNode 📝", "yellow"))
+
             research_question = state.get("research_question", "")
             selector_messages = state.get("selector_response", [])
             serper_messages = state.get("serper_response", [])
             scraper_messages = state.get("scraper_response", [])
 
-            # Get the last messages if available
             selector_msg = selector_messages[-1] if selector_messages else None
             serper_msg = serper_messages[-1] if serper_messages else None
             scraper_msg = scraper_messages[-1] if scraper_messages else None
 
-            if not selector_msg or not isinstance(selector_msg, HumanMessage):
+            if not selector_msg or not hasattr(selector_msg, "content"):
                 return {
                     **state,
                     "reporter_response": [
-                        HumanMessage(content="No valid selector response to report on")
+                        ReporterMessage(
+                            content={
+                                "content": "No valid selector response to report on",
+                                "metadata": {
+                                    "error": "Missing selector response",
+                                    "research_question": research_question,
+                                },
+                            }
+                        )
                     ],
                 }
 
-            # Prepare the input for the agent
-            response = self.agent.invoke(
-                {
-                    "input": {
-                        "research_question": research_question,
-                        "selector_response": selector_msg.content,
-                        "search_results": serper_msg.content if serper_msg else "",
-                        "scraped_content": scraper_msg.content if scraper_msg else "",
-                    }
-                }
-            )
+            try:
+                selector_data = json.loads(selector_msg.content)
+            except json.JSONDecodeError:
+                selector_data = selector_msg.content
 
-            # Extract the response content
+            agent_input = {
+                "input": {
+                    "research_question": research_question,
+                    "selector_response": selector_data,
+                    "search_results": serper_msg.content if serper_msg else "",
+                    "scraped_content": scraper_msg.content if scraper_msg else "",
+                }
+            }
+
+            response = self.agent.invoke(agent_input)
             response_content = (
                 response.get("output", response)
                 if isinstance(response, dict)
@@ -75,7 +105,19 @@ class ReporterNode(GraphNode):
             logger.info("Successfully generated report ✅")
             return {
                 **state,
-                "reporter_response": [HumanMessage(content=str(response_content))],
+                "reporter_response": [
+                    ReporterMessage(
+                        content={
+                            "content": response_content,
+                            "metadata": {
+                                "research_question": research_question,
+                                "selected_url": selector_data.get("selected_page_url"),
+                                "has_serp": bool(serper_msg),
+                                "has_scraper": bool(scraper_msg),
+                            },
+                        }
+                    )
+                ],
             }
 
         except Exception as e:
@@ -83,5 +125,18 @@ class ReporterNode(GraphNode):
             logger.error(error_msg)
             return {
                 **state,
-                "reporter_response": [HumanMessage(content=error_msg)],
+                "reporter_response": [
+                    ReporterMessage(
+                        content={
+                            "content": error_msg,
+                            "metadata": {
+                                "error": str(e),
+                                "error_type": type(e).__name__,
+                            },
+                        }
+                    )
+                ],
             }
+
+    def __call__(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        return self.process(state)
